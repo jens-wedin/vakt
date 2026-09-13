@@ -39,8 +39,10 @@ def render() -> str:
       <div class="card"><div class="num">{len(devices)}</div><div>known devices</div></div>
       <div class="card"><div class="num">{escape(', '.join(f'{n}: {c}' for n, c in sorted(nets.items())) or '—')}</div><div>by network</div></div>
       <div class="card {'bad' if protect_down else 'ok'}"><div class="num">{len(protect_down)}</div><div>Protect devices down</div></div>
+      <div class="card"><div class="num">{len(store.get_config_objects())}</div><div>config objects watched</div></div>
       <div class="card"><div class="num">{_age(store.get_meta('last_clients_poll'))}</div><div>last client poll</div></div>
       <div class="card"><div class="num">{_age(store.get_meta('last_protect_poll'))}</div><div>last Protect poll</div></div>
+      <div class="card"><div class="num">{_age(store.get_meta('last_config_poll'))}</div><div>last config poll</div></div>
     """
 
     protect_rows = "".join(

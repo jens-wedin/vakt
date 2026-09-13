@@ -42,6 +42,13 @@ def db() -> sqlite3.Connection:
           state TEXT,
           last_change TEXT
         );
+        CREATE TABLE IF NOT EXISTS config_objects (
+          collection TEXT,
+          obj_id TEXT,
+          name TEXT,
+          data TEXT,           -- normalized canonical JSON (secrets hashed)
+          PRIMARY KEY (collection, obj_id)
+        );
         CREATE TABLE IF NOT EXISTS meta (
           key TEXT PRIMARY KEY,
           value TEXT
@@ -92,6 +99,26 @@ def recent_events(limit=100) -> list[sqlite3.Row]:
 
 def get_protect_devices() -> dict[str, sqlite3.Row]:
     return {r["id"]: r for r in db().execute("SELECT * FROM protect_devices")}
+
+
+def get_config_objects() -> dict[tuple[str, str], sqlite3.Row]:
+    return {(r["collection"], r["obj_id"]): r
+            for r in db().execute("SELECT * FROM config_objects")}
+
+
+def upsert_config_object(collection, obj_id, name, data):
+    db().execute("""
+      INSERT INTO config_objects(collection,obj_id,name,data) VALUES(?,?,?,?)
+      ON CONFLICT(collection,obj_id) DO UPDATE SET
+        name=excluded.name, data=excluded.data
+    """, (collection, obj_id, name, data))
+    db().commit()
+
+
+def delete_config_object(collection, obj_id):
+    db().execute("DELETE FROM config_objects WHERE collection=? AND obj_id=?",
+                 (collection, obj_id))
+    db().commit()
 
 
 def upsert_protect_device(id, kind, name, state):

@@ -7,6 +7,7 @@ UNIFI_NVR_CONSOLE_ID = os.environ.get("UNIFI_NVR_CONSOLE_ID", "")
 
 POLL_CLIENTS_SEC = int(os.environ.get("POLL_CLIENTS_SEC", "60"))
 POLL_PROTECT_SEC = int(os.environ.get("POLL_PROTECT_SEC", "120"))
+POLL_CONFIG_SEC = int(os.environ.get("POLL_CONFIG_SEC", "300"))
 
 DB_PATH = os.environ.get("DB_PATH", "./vakt.db")
 

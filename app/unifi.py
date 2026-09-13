@@ -19,6 +19,29 @@ async def get_clients() -> list[dict]:
         return r.json()["data"]
 
 
+async def get_config_state() -> dict[str, list[dict]]:
+    """Security-relevant gateway config, grouped by collection, for drift detection."""
+    base = f"{BASE}/{config.UNIFI_CONSOLE_ID}/proxy/network"
+    out: dict[str, list[dict]] = {}
+    async with httpx.AsyncClient(timeout=30) as cx:
+        async def legacy(path):
+            r = await cx.get(f"{base}/api/s/default/{path}", headers=_headers())
+            r.raise_for_status()
+            return r.json()["data"]
+
+        out["firewallrule"] = await legacy("rest/firewallrule")
+        out["portforward"] = await legacy("rest/portforward")
+        out["wlanconf"] = await legacy("rest/wlanconf")
+        out["networkconf"] = await legacy("rest/networkconf")
+        # Full settings dump is huge; watch the sections that matter for security.
+        out["setting"] = [s for s in await legacy("get/setting")
+                          if s.get("key") in ("usg", "ips", "mgmt")]
+        r = await cx.get(f"{base}/v2/api/site/default/nat", headers=_headers())
+        r.raise_for_status()
+        out["nat"] = r.json()
+    return out
+
+
 async def get_protect_devices() -> list[dict]:
     """Protect device states from the NVR console: cameras, sensors, link stations.
 

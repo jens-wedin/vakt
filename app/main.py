@@ -15,7 +15,7 @@ import web
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 log = logging.getLogger("vakt")
 
-_fail = {"clients": 0, "protect": 0}
+_fail = {"clients": 0, "protect": 0, "config": 0}
 
 
 async def _poll(which: str, interval: int, fetch, process):
@@ -40,8 +40,12 @@ async def _poll(which: str, interval: int, fetch, process):
 async def lifespan(app: FastAPI):
     config.validate()
     store.db()
-    tasks = [asyncio.create_task(
-        _poll("clients", config.POLL_CLIENTS_SEC, unifi.get_clients, detect.process_clients))]
+    tasks = [
+        asyncio.create_task(
+            _poll("clients", config.POLL_CLIENTS_SEC, unifi.get_clients, detect.process_clients)),
+        asyncio.create_task(
+            _poll("config", config.POLL_CONFIG_SEC, unifi.get_config_state, detect.process_config)),
+    ]
     if config.UNIFI_NVR_CONSOLE_ID:
         tasks.append(asyncio.create_task(
             _poll("protect", config.POLL_PROTECT_SEC, unifi.get_protect_devices, detect.process_protect)))
@@ -65,5 +69,6 @@ def healthz():
     return JSONResponse({
         "last_clients_poll": store.get_meta("last_clients_poll"),
         "last_protect_poll": store.get_meta("last_protect_poll"),
+        "last_config_poll": store.get_meta("last_config_poll"),
         "consecutive_failures": _fail,
     })

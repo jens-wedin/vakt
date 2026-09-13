@@ -11,6 +11,7 @@ when something changes. Dashboard on port 8080.
 | `new_device` | critical on Default, warning on IoT, info on Free WiFi | A MAC never seen before joined the network |
 | `network_change` | warning | A known device switched VLANs |
 | `protect_down` / `protect_up` | critical / info | A Protect camera, sensor, or SuperLink changed state (needs `UNIFI_NVR_CONSOLE_ID`) |
+| `config_added` / `config_changed` / `config_removed` | critical for firewall rules, port forwards, NAT rules, and UPnP flips; warning for WLAN/network/settings drift | Gateway config drifted from the stored golden state (checked every 5 min; WiFi passphrases and other secrets are compared as hashes, never stored) |
 | `poller_error` / `poller_ok` | warning / info | The API polling itself broke or recovered |
 | `baseline` | info | First run: all current devices registered as known (no alert storm) |
 
@@ -51,10 +52,8 @@ are pushed; info events only show on the dashboard.
 - The device registry keys on MAC. Phones with per-network private WiFi
   addresses use a stable MAC per SSID, so they baseline once per network.
 
-## Roadmap (not in v1)
+## Roadmap
 
-- Config-drift detection: diff firewall rules, port forwards, UPnP, WLAN and
-  NAT settings against a stored golden state.
 - Traffic anomaly detection from per-client byte counters (note: counters are
   unreliable for multiple wired clients sharing one switch port — see
   `../memory.md`).
