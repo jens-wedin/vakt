@@ -51,11 +51,19 @@ def render() -> str:
         f"<td>{_age(p['last_change'])}</td></tr>"
         for p in protect) or "<tr><td colspan=4>no Protect data (set UNIFI_NVR_CONSOLE_ID)</td></tr>"
 
+    def _ack_cell(e):
+        if e["acked"]:
+            return "<td class='dim'>✓</td>"
+        if e["severity"] == "info":
+            return "<td></td>"
+        return (f"<td><form method='post' action='/ack/{e['id']}'>"
+                f"<button class='ackbtn'>ack</button></form></td>")
+
     event_rows = "".join(
-        f"<tr><td>{_age(e['ts'])}</td>"
+        f"<tr class='{'dim' if e['acked'] else ''}'><td>{_age(e['ts'])}</td>"
         f"<td><span class='sev' style='background:{SEV_COLOR.get(e['severity'], '#888')}'>{escape(e['severity'])}</span></td>"
-        f"<td>{escape(e['kind'])}</td><td>{escape(e['message'])}</td></tr>"
-        for e in events) or "<tr><td colspan=4>no events yet</td></tr>"
+        f"<td>{escape(e['kind'])}</td><td>{escape(e['message'])}</td>{_ack_cell(e)}</tr>"
+        for e in events) or "<tr><td colspan=5>no events yet</td></tr>"
 
     device_rows = "".join(
         f"<tr><td>{escape(d['last_network'] or '?')}</td><td>{escape(d['last_ip'] or '—')}</td>"
@@ -88,6 +96,10 @@ def render() -> str:
   .sev {{ color: #0d0e10; border-radius: 4px; padding: 1px 7px; font-size: 12px; font-weight: 600; }}
   .okc {{ color: #5a9e6f; }} .badc {{ color: #e5484d; font-weight: 600; }}
   .mono {{ font-family: ui-monospace, monospace; font-size: 13px; }}
+  .dim {{ opacity: .45; }}
+  .ackbtn {{ background: #2a2e35; color: #d7dae0; border: 1px solid #3a3f48; border-radius: 4px;
+             padding: 1px 8px; font-size: 12px; cursor: pointer; }}
+  .ackbtn:hover {{ border-color: #5a9e6f; }}
 </style></head><body>
 <header><h1><span>●</span> vakt</h1><small>network watchtower · read-only · refreshes every 30 s</small></header>
 <main>
@@ -95,7 +107,7 @@ def render() -> str:
   <h2>Protect devices</h2>
   <div class="tblwrap"><table><tr><th>Kind</th><th>Name</th><th>State</th><th>Changed</th></tr>{protect_rows}</table></div>
   <h2>Events</h2>
-  <div class="tblwrap"><table><tr><th>When</th><th>Severity</th><th>Kind</th><th>Message</th></tr>{event_rows}</table></div>
+  <div class="tblwrap"><table><tr><th>When</th><th>Severity</th><th>Kind</th><th>Message</th><th></th></tr>{event_rows}</table></div>
   <h2>Known devices</h2>
   <div class="tblwrap"><table><tr><th>Network</th><th>IP</th><th>Name</th><th>MAC</th><th>Link</th><th>Seen</th><th>First seen</th></tr>{device_rows}</table></div>
 </main></body></html>"""

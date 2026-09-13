@@ -9,6 +9,8 @@ services:
       - UNIFI_CONSOLE_ID=${UNIFI_CONSOLE_ID}
       - UNIFI_NVR_CONSOLE_ID=${UNIFI_NVR_CONSOLE_ID:-}
       - NTFY_URL=${NTFY_URL:-}
+      - DASHBOARD_PASSWORD=${DASHBOARD_PASSWORD:-}
+      - TRAFFIC_EXEMPT=${TRAFFIC_EXEMPT:-}
       - DB_PATH=/data/vakt.db
     volumes:
       - vakt-data:/data

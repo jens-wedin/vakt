@@ -1,9 +1,11 @@
 import asyncio
 import contextlib
 import logging
+import secrets as pysecrets
 
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 import alerts
 import config
@@ -57,11 +59,27 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+_basic = HTTPBasic(auto_error=False)
+
+
+def require_auth(creds: HTTPBasicCredentials | None = Depends(_basic)):
+    """HTTP Basic auth when DASHBOARD_PASSWORD is set (any username)."""
+    if not config.DASHBOARD_PASSWORD:
+        return
+    if creds is None or not pysecrets.compare_digest(
+            creds.password.encode(), config.DASHBOARD_PASSWORD.encode()):
+        raise HTTPException(status_code=401, headers={"WWW-Authenticate": "Basic realm=vakt"})
 
 
 @app.get("/", response_class=HTMLResponse)
-def dashboard():
+def dashboard(_=Depends(require_auth)):
     return web.render()
+
+
+@app.post("/ack/{event_id}")
+def ack(event_id: int, _=Depends(require_auth)):
+    store.ack_event(event_id)
+    return RedirectResponse("/", status_code=303)
 
 
 @app.get("/healthz")

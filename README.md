@@ -12,6 +12,7 @@ when something changes. Dashboard on port 8080.
 | `network_change` | warning | A known device switched VLANs |
 | `protect_down` / `protect_up` | critical / info | A Protect camera, sensor, or SuperLink changed state (needs `UNIFI_NVR_CONSOLE_ID`) |
 | `config_added` / `config_changed` / `config_removed` | critical for firewall rules, port forwards, NAT rules, and UPnP flips; warning for WLAN/network/settings drift | Gateway config drifted from the stored golden state (checked every 5 min; WiFi passphrases and other secrets are compared as hashes, never stored) |
+| `traffic_anomaly` | critical on IoT, warning elsewhere | A device's upload ran >2 Mbit/s AND 8× its own learned baseline, sustained 10+ min (learns ~30 min first; max one alert per device per 6 h; exempt devices via `TRAFFIC_EXEMPT`) |
 | `poller_error` / `poller_ok` | warning / info | The API polling itself broke or recovered |
 | `baseline` | info | First run: all current devices registered as known (no alert storm) |
 
@@ -52,11 +53,14 @@ are pushed; info events only show on the dashboard.
 - The device registry keys on MAC. Phones with per-network private WiFi
   addresses use a stable MAC per SSID, so they baseline once per network.
 
+## Dashboard auth & event ack
+
+Set `DASHBOARD_PASSWORD` to require HTTP Basic auth on the dashboard (any
+username). Warning/critical events get an **ack** button; acknowledged rows are
+dimmed. Note: wired byte counters are unreliable for devices sharing one switch
+port (see `../memory.md`), so traffic anomalies mostly matter for WiFi clients.
+
 ## Roadmap
 
-- Traffic anomaly detection from per-client byte counters (note: counters are
-  unreliable for multiple wired clients sharing one switch port — see
-  `../memory.md`).
 - Local-mode polling against `https://192.168.1.1` with a console-local API key
-  (works with internet down; needs testing of which endpoints accept local keys).
-- Dashboard auth + event acknowledge/mute.
+  (works with internet down; needs a local key created on the console first).

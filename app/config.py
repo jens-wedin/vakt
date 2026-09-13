@@ -14,6 +14,14 @@ DB_PATH = os.environ.get("DB_PATH", "./vakt.db")
 # Optional ntfy topic URL, e.g. https://ntfy.sh/jens-vakt or a self-hosted instance
 NTFY_URL = os.environ.get("NTFY_URL", "")
 
+# Optional HTTP Basic auth for the dashboard (any username). Empty = no auth.
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
+
+# MACs excluded from traffic-anomaly checks (comma-separated), e.g. a camera
+# that legitimately uploads at high rates in bursts.
+TRAFFIC_EXEMPT = {m.strip().lower() for m in
+                  os.environ.get("TRAFFIC_EXEMPT", "").split(",") if m.strip()}
+
 
 def validate():
     missing = [n for n, v in [("UNIFI_API_KEY", UNIFI_API_KEY),

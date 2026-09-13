@@ -2,8 +2,20 @@
 and returns the list of newly created events (already persisted)."""
 import hashlib
 import json
+import time
 
+import config
 import store
+
+# Traffic anomaly tuning: learn ~30 min, then flag uploads that are both
+# absolutely high (>2 Mbit/s) and far above the device's own baseline (8×),
+# sustained for 10+ minutes. One alert per device per 6 h.
+TRAFFIC_LEARN_SAMPLES = 30
+TRAFFIC_ABS_FLOOR_BPS = 250_000          # bytes/s ≈ 2 Mbit/s
+TRAFFIC_EWMA_FACTOR = 8
+TRAFFIC_SUSTAIN_SEC = 600
+TRAFFIC_REALERT_SEC = 6 * 3600
+TRAFFIC_EWMA_ALPHA = 0.1
 
 CONFIG_LABEL = {
     "firewallrule": "Firewall rule",
@@ -30,11 +42,55 @@ def _new_device_severity(network: str) -> str:
     return "warning"
 
 
+def _traffic_check(c: dict, prev, now_ts: float) -> tuple[dict, str | None]:
+    """Update per-device upload EWMA from counter deltas; return (field updates,
+    anomaly message or None). Counter resets and irregular sample gaps are skipped."""
+    pre = "wired-" if c.get("is_wired") else ""
+    rx = c.get(pre + "rx_bytes")  # rx_* = FROM the client = upload
+    tx = c.get(pre + "tx_bytes")
+    upd: dict = {"last_rx_bytes": rx, "last_tx_bytes": tx, "last_counter_ts": now_ts}
+    if rx is None or prev is None or prev["last_rx_bytes"] is None \
+            or prev["last_counter_ts"] is None:
+        return upd, None
+    dt = now_ts - prev["last_counter_ts"]
+    drx = rx - prev["last_rx_bytes"]
+    if not (10 <= dt <= 600) or drx < 0:  # gap too odd, or counter reset (reboot)
+        return upd, None
+    rate = drx / dt
+    ewma = prev["ewma_up"] or 0.0
+    samples = prev["samples"] or 0
+    learning = samples < TRAFFIC_LEARN_SAMPLES
+    is_high = (not learning) and \
+        rate > max(TRAFFIC_ABS_FLOOR_BPS, TRAFFIC_EWMA_FACTOR * ewma)
+
+    # Learn only from normal samples — a baseline that keeps learning during an
+    # anomaly chases the attack traffic and dissolves the alert condition.
+    if not is_high:
+        upd |= {"ewma_up": ewma + TRAFFIC_EWMA_ALPHA * (rate - ewma),
+                "samples": samples + 1, "high_since": None}
+        return upd, None
+
+    high_since = prev["high_since"]
+    if not high_since:
+        upd["high_since"] = now_ts
+    elif now_ts - high_since >= TRAFFIC_SUSTAIN_SEC:
+        upd["high_since"] = None
+        last_alert = prev["last_traffic_alert"]
+        if last_alert is None or now_ts - last_alert >= TRAFFIC_REALERT_SEC:
+            # Adopt the new level so a legitimately changed usage pattern
+            # alerts once instead of every 6 hours.
+            upd |= {"last_traffic_alert": now_ts, "ewma_up": rate}
+            return upd, (f"uploading {rate * 8 / 1e6:.1f} Mbps sustained for 10+ min "
+                         f"(its normal baseline is {ewma * 8 / 1e6:.2f} Mbps)")
+    return upd, None
+
+
 def process_clients(clients: list[dict]) -> list[dict]:
     events = []
     known = store.get_devices()
     baseline = store.get_meta("baseline_done") != "1"
     seen = store.now_iso()
+    now_ts = time.time()
 
     for c in clients:
         mac = c.get("mac")
@@ -58,6 +114,15 @@ def process_clients(clients: list[dict]) -> list[dict]:
                     "network_change", "warning", mac,
                     f"\"{name}\" moved from {prev['last_network']} to {network}"))
             store.upsert_device(mac, name, network, ip, c.get("is_wired"), seen)
+
+        if mac.lower() in config.TRAFFIC_EXEMPT:
+            continue
+        upd, anomaly = _traffic_check(c, prev, now_ts)
+        store.update_device_fields(mac, **upd)
+        if anomaly:
+            sev = "critical" if network == "IoT" else "warning"
+            events.append(store.add_event("traffic_anomaly", sev, mac,
+                                          f"\"{name}\" is {anomaly}"))
 
     if baseline:
         store.set_meta("baseline_done", "1")

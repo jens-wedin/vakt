@@ -54,8 +54,25 @@ def db() -> sqlite3.Connection:
           value TEXT
         );
         """)
+        _ensure_columns(_conn, "devices", {
+            "ewma_up": "REAL DEFAULT 0",        # learned upload baseline, bytes/s
+            "samples": "INTEGER DEFAULT 0",
+            "last_rx_bytes": "INTEGER",
+            "last_tx_bytes": "INTEGER",
+            "last_counter_ts": "REAL",
+            "high_since": "REAL",
+            "last_traffic_alert": "REAL",
+        })
+        _ensure_columns(_conn, "events", {"acked": "INTEGER DEFAULT 0"})
         _conn.commit()
     return _conn
+
+
+def _ensure_columns(conn: sqlite3.Connection, table: str, cols: dict[str, str]):
+    have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+    for name, decl in cols.items():
+        if name not in have:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
 def get_meta(key: str) -> str | None:
@@ -82,6 +99,18 @@ def upsert_device(mac, name, network, ip, is_wired, seen):
         last_network=excluded.last_network, last_ip=excluded.last_ip,
         is_wired=excluded.is_wired
     """, (mac, name, seen, seen, network, ip, 1 if is_wired else 0))
+    db().commit()
+
+
+def update_device_fields(mac, **fields):
+    # column names are code-controlled, never user input
+    cols = ", ".join(f"{k}=?" for k in fields)
+    db().execute(f"UPDATE devices SET {cols} WHERE mac=?", (*fields.values(), mac))
+    db().commit()
+
+
+def ack_event(event_id: int):
+    db().execute("UPDATE events SET acked=1 WHERE id=?", (event_id,))
     db().commit()
 
 
