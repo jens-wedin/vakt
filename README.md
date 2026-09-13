@@ -24,7 +24,7 @@ from the second poll onward.
 3. Set the environment variables from `.env.example` in Coolify's UI
    (mark `UNIFI_API_KEY` as a secret). Values live in the parent project's
    `memory.md` / `.env` — never commit them.
-4. Deploy. The dashboard is on port 8080; keep it LAN-only (don't put a public
+4. Deploy. The dashboard is published on host port 8181; keep it LAN-only (don't put a public
    domain on it) or protect it behind Coolify's auth/proxy if you expose it.
 
 ## Run locally (dev)

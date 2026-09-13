@@ -2,7 +2,8 @@ services:
   vakt:
     build: .
     ports:
-      - "8080:8080"
+      # host 8181 → container 8080 (8080 on the host is taken by Coolify's proxy)
+      - "8181:8080"
     environment:
       - UNIFI_API_KEY=${UNIFI_API_KEY}
       - UNIFI_CONSOLE_ID=${UNIFI_CONSOLE_ID}
