@@ -2,8 +2,9 @@ import asyncio
 import contextlib
 import logging
 import secrets as pysecrets
+from urllib.parse import urlparse
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
@@ -62,8 +63,15 @@ app = FastAPI(lifespan=lifespan)
 _basic = HTTPBasic(auto_error=False)
 
 
-def require_auth(creds: HTTPBasicCredentials | None = Depends(_basic)):
-    """HTTP Basic auth when DASHBOARD_PASSWORD is set (any username)."""
+def require_auth(request: Request, creds: HTTPBasicCredentials | None = Depends(_basic)):
+    """HTTP Basic auth when DASHBOARD_PASSWORD is set (any username), plus a
+    same-origin check on state-changing methods (CSRF: browsers always send
+    Origin on cross-site POSTs; absent Origin+Referer means a non-browser
+    client like curl, which CSRF cannot drive)."""
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        origin = request.headers.get("origin") or request.headers.get("referer") or ""
+        if origin and urlparse(origin).netloc != request.headers.get("host", ""):
+            raise HTTPException(status_code=403, detail="cross-origin request rejected")
     if not config.DASHBOARD_PASSWORD:
         return
     if creds is None or not pysecrets.compare_digest(
