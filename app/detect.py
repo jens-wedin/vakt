@@ -109,11 +109,16 @@ def process_clients(clients: list[dict]) -> list[dict]:
                     "new_device", _new_device_severity(network), mac,
                     f"New {kind} device \"{name}\" ({mac}) joined {network} with IP {ip or '—'}"))
         else:
-            if prev["last_network"] and network != "?" and network != prev["last_network"]:
+            prev_net = prev["last_network"]
+            # "?" means the controller had no network recorded (e.g. mid-DHCP);
+            # unknown→known is not a real move, and "?" must never overwrite a
+            # known network or a real move would be reported as ?→X later.
+            if prev_net and prev_net != "?" and network != "?" and network != prev_net:
                 events.append(store.add_event(
                     "network_change", "warning", mac,
-                    f"\"{name}\" moved from {prev['last_network']} to {network}"))
-            store.upsert_device(mac, name, network, ip, c.get("is_wired"), seen)
+                    f"\"{name}\" ({mac}) moved from {prev_net} to {network}, now IP {ip or '—'}"))
+            keep_net = network if network != "?" else (prev_net or "?")
+            store.upsert_device(mac, name, keep_net, ip, c.get("is_wired"), seen)
 
         if mac.lower() in config.TRAFFIC_EXEMPT:
             continue
@@ -122,7 +127,7 @@ def process_clients(clients: list[dict]) -> list[dict]:
         if anomaly:
             sev = "critical" if network == "IoT" else "warning"
             events.append(store.add_event("traffic_anomaly", sev, mac,
-                                          f"\"{name}\" is {anomaly}"))
+                                          f"\"{name}\" ({mac}, {ip or 'no IP'}) is {anomaly}"))
 
     if baseline:
         store.set_meta("baseline_done", "1")
