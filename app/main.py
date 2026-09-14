@@ -85,6 +85,14 @@ def dashboard(_=Depends(require_auth)):
     return web.render()
 
 
+@app.post("/device/{mac}/{verdict}")
+def device_verdict(mac: str, verdict: str, _=Depends(require_auth)):
+    if verdict not in ("ok", "not_ok"):
+        raise HTTPException(status_code=400, detail="verdict must be ok or not_ok")
+    store.set_device_status(mac, "ok" if verdict == "ok" else "flagged")
+    return RedirectResponse("/", status_code=303)
+
+
 @app.post("/verdict/{event_id}/{verdict}")
 def verdict(event_id: int, verdict: str, _=Depends(require_auth)):
     if verdict not in ("ok", "not_ok"):

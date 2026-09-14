@@ -82,16 +82,20 @@ def render() -> str:
         for e in events) or "<tr><td colspan=5>no events yet</td></tr>"
 
     def _dev_status(d):
+        ok_btn = (f"<form method='post' action='/device/{escape(d['mac'])}/ok'>"
+                  f"<button class='ackbtn'>OK</button></form>")
+        no_btn = (f"<form method='post' action='/device/{escape(d['mac'])}/not_ok'>"
+                  f"<button class='ackbtn no'>Not OK</button></form>")
         if d["status"] == "flagged":
-            return "<span class='flag'>⚠ flagged</span>"
+            return f"<span class='flag'>⚠ flagged</span> {ok_btn}"
         if d["status"] == "ok":
-            return "<span class='okc'>✓</span>"
-        return "<span class='dim'>–</span>"
+            return f"<span class='okc'>✓</span> {no_btn}"
+        return f"{ok_btn}{no_btn}"
 
     device_rows = "".join(
         f"<tr class='{'flagrow' if d['status'] == 'flagged' else ''}'>"
         f"<td>{escape(d['last_network'] or '?')}</td><td>{escape(d['last_ip'] or '—')}</td>"
-        f"<td>{escape(d['name'] or '?')}</td><td>{_dev_status(d)}</td>"
+        f"<td>{escape(d['name'] or '?')}</td><td class='btns'>{_dev_status(d)}</td>"
         f"<td class='mono'>{escape(d['mac'])}</td>"
         f"<td>{'wired' if d['is_wired'] else 'WiFi'}</td>"
         f"<td>{_age(d['last_seen'])}</td><td>{_age(d['first_seen'])}</td></tr>"
@@ -138,6 +142,6 @@ def render() -> str:
   <div class="tblwrap"><table><tr><th>Kind</th><th>Name</th><th>State</th><th>Changed</th></tr>{protect_rows}</table></div>
   <h2>Events</h2>
   <div class="tblwrap"><table><tr><th>When</th><th>Severity</th><th>Kind</th><th>Message</th><th></th></tr>{event_rows}</table></div>
-  <h2>Known devices</h2>
+  <h2>Known devices{f" — {sum(1 for d in devices if not d['status'])} unreviewed" if any(not d['status'] for d in devices) else ""}</h2>
   <div class="tblwrap"><table><tr><th>Network</th><th>IP</th><th>Name</th><th>Status</th><th>MAC</th><th>Link</th><th>Seen</th><th>First seen</th></tr>{device_rows}</table></div>
 </main></body></html>"""
