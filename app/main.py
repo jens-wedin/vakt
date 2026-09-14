@@ -84,9 +84,14 @@ def dashboard(_=Depends(require_auth)):
     return web.render()
 
 
-@app.post("/ack/{event_id}")
-def ack(event_id: int, _=Depends(require_auth)):
-    store.ack_event(event_id)
+@app.post("/verdict/{event_id}/{verdict}")
+def verdict(event_id: int, verdict: str, _=Depends(require_auth)):
+    if verdict not in ("ok", "not_ok"):
+        raise HTTPException(status_code=400, detail="verdict must be ok or not_ok")
+    e = store.set_event_verdict(event_id, verdict)
+    # A verdict on a device-related event also sets that device's trust status.
+    if e and e["mac"] and e["kind"] in ("new_device", "network_change", "traffic_anomaly"):
+        store.set_device_status(e["mac"], "ok" if verdict == "ok" else "flagged")
     return RedirectResponse("/", status_code=303)
 
 

@@ -53,12 +53,15 @@ are pushed; info events only show on the dashboard.
 - The device registry keys on MAC. Phones with per-network private WiFi
   addresses use a stable MAC per SSID, so they baseline once per network.
 
-## Dashboard auth & event ack
+## Dashboard auth & event triage
 
 Set `DASHBOARD_PASSWORD` to require HTTP Basic auth on the dashboard (any
-username). Warning/critical events get an **ack** button; acknowledged rows are
-dimmed. Note: wired byte counters are unreliable for devices sharing one switch
-port (see `../memory.md`), so traffic anomalies mostly matter for WiFi clients.
+username). Warning/critical events get **OK** / **Not OK** buttons: OK dims the
+event and marks the related device as verified (✓ in the device table); Not OK
+flags the event and device in red and counts on the "to review / flagged"
+card until resolved (press OK later to clear). Note: wired byte counters are
+unreliable for devices sharing one switch port (see `../memory.md`), so traffic
+anomalies mostly matter for WiFi clients.
 
 ## Roadmap
 

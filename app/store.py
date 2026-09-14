@@ -62,8 +62,10 @@ def db() -> sqlite3.Connection:
             "last_counter_ts": "REAL",
             "high_since": "REAL",
             "last_traffic_alert": "REAL",
+            "status": "TEXT",  # NULL = unreviewed, 'ok' = verified, 'flagged' = suspicious
         })
-        _ensure_columns(_conn, "events", {"acked": "INTEGER DEFAULT 0"})
+        _ensure_columns(_conn, "events", {"acked": "INTEGER DEFAULT 0",
+                                          "verdict": "TEXT"})
         _conn.commit()
     return _conn
 
@@ -109,8 +111,14 @@ def update_device_fields(mac, **fields):
     db().commit()
 
 
-def ack_event(event_id: int):
-    db().execute("UPDATE events SET acked=1 WHERE id=?", (event_id,))
+def set_event_verdict(event_id: int, verdict: str) -> sqlite3.Row | None:
+    db().execute("UPDATE events SET verdict=?, acked=1 WHERE id=?", (verdict, event_id))
+    db().commit()
+    return db().execute("SELECT * FROM events WHERE id=?", (event_id,)).fetchone()
+
+
+def set_device_status(mac: str, status: str):
+    db().execute("UPDATE devices SET status=? WHERE mac=?", (status, mac))
     db().commit()
 
 
