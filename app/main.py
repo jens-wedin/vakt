@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging
+import os
 import secrets as pysecrets
 from urllib.parse import urlparse
 
@@ -98,6 +99,7 @@ def verdict(event_id: int, verdict: str, _=Depends(require_auth)):
 @app.get("/healthz")
 def healthz():
     return JSONResponse({
+        "commit": os.environ.get("SOURCE_COMMIT", "unknown")[:12],
         "last_clients_poll": store.get_meta("last_clients_poll"),
         "last_protect_poll": store.get_meta("last_protect_poll"),
         "last_config_poll": store.get_meta("last_config_poll"),
