@@ -103,7 +103,6 @@ def render() -> str:
 
     return f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="30">
 <title>vakt</title>
 <style>
   body {{ font: 14px/1.5 -apple-system, system-ui, sans-serif; margin: 0; background: #14161a; color: #d7dae0; }}
@@ -144,4 +143,27 @@ def render() -> str:
   <div class="tblwrap"><table><tr><th>When</th><th>Severity</th><th>Kind</th><th>Message</th><th></th></tr>{event_rows}</table></div>
   <h2>Known devices{f" — {sum(1 for d in devices if not d['status'])} unreviewed" if any(not d['status'] for d in devices) else ""}</h2>
   <div class="tblwrap"><table><tr><th>Network</th><th>IP</th><th>Name</th><th>Status</th><th>MAC</th><th>Link</th><th>Seen</th><th>First seen</th></tr>{device_rows}</table></div>
-</main></body></html>"""
+</main>
+<script>
+async function refreshMain() {{
+  try {{
+    const r = await fetch(location.pathname, {{cache: 'no-store'}});
+    if (!r.ok) return;
+    const doc = new DOMParser().parseFromString(await r.text(), 'text/html');
+    const cur = document.querySelector('main'), next = doc.querySelector('main');
+    if (cur && next) cur.replaceWith(next);
+  }} catch (e) {{}}
+}}
+document.addEventListener('submit', async (e) => {{
+  const f = e.target;
+  if (f.matches && f.matches('form[action^="/verdict/"], form[action^="/device/"]')) {{
+    e.preventDefault();
+    const b = f.querySelector('button');
+    if (b) b.disabled = true;
+    try {{ await fetch(f.action, {{method: 'POST'}}); }} catch (err) {{}}
+    refreshMain();
+  }}
+}});
+setInterval(refreshMain, 30000);
+</script>
+</body></html>"""
