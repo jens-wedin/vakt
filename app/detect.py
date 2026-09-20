@@ -28,6 +28,34 @@ CONFIG_LABEL = {
 # Changes here can open the network to the outside — always critical.
 CRITICAL_COLLECTIONS = {"firewallrule", "portforward", "nat"}
 
+# Raw field diffs read like JSON dumps; these spell them out instead.
+SECRET_LABELS = {"x_passphrase": "Wi-Fi passphrase"}
+
+
+def _pretty_field(field: str) -> str:
+    return field.replace("_", " ").strip().capitalize()
+
+
+def _pretty_value(v) -> str:
+    if v is None or v == "":
+        return "(none)"
+    if v is True:
+        return "on"
+    if v is False:
+        return "off"
+    if isinstance(v, (list, dict)):
+        return f"{len(v)} items"
+    return str(v)
+
+
+def humanize_change(field: str, old, new) -> str:
+    """One changed config field, in words rather than JSON."""
+    if field == "enabled":
+        return "Turned on (was off)" if new else "Turned off (was on)"
+    if field.startswith("x_"):  # stored as digests — report the fact, never the value
+        return f"{SECRET_LABELS.get(field, _pretty_field(field[2:]))} changed"
+    return f"{_pretty_field(field)}: {_pretty_value(old)} → {_pretty_value(new)}"
+
 
 def _client_name(c: dict) -> str:
     return c.get("name") or c.get("hostname") or c.get("oui") or "unknown device"
@@ -44,7 +72,7 @@ def _new_device_severity(network: str) -> str:
 
 def _traffic_check(c: dict, prev, now_ts: float) -> tuple[dict, str | None]:
     """Update per-device upload EWMA from counter deltas; return (field updates,
-    anomaly message or None). Counter resets and irregular sample gaps are skipped."""
+    anomaly detail or None). Counter resets and irregular sample gaps are skipped."""
     pre = "wired-" if c.get("is_wired") else ""
     rx = c.get(pre + "rx_bytes")  # rx_* = FROM the client = upload
     tx = c.get(pre + "tx_bytes")
@@ -80,8 +108,9 @@ def _traffic_check(c: dict, prev, now_ts: float) -> tuple[dict, str | None]:
             # Adopt the new level so a legitimately changed usage pattern
             # alerts once instead of every 6 hours.
             upd |= {"last_traffic_alert": now_ts, "ewma_up": rate}
-            return upd, (f"uploading {rate * 8 / 1e6:.1f} Mbps sustained for 10+ min "
-                         f"(its normal baseline is {ewma * 8 / 1e6:.2f} Mbps)")
+            return upd, {"rate_mbps": round(rate * 8 / 1e6, 1),
+                         "baseline_mbps": round(ewma * 8 / 1e6, 2),
+                         "minutes": int((now_ts - high_since) // 60)}
     return upd, None
 
 
@@ -99,6 +128,7 @@ def process_clients(clients: list[dict]) -> list[dict]:
         network = c.get("network") or "?"
         ip = c.get("ip") or ""
         name = _client_name(c)
+        link = "Wired" if c.get("is_wired") else "Wi-Fi"
         prev = known.get(mac)
 
         if prev is None:
@@ -107,7 +137,8 @@ def process_clients(clients: list[dict]) -> list[dict]:
                 kind = "wired" if c.get("is_wired") else "WiFi"
                 events.append(store.add_event(
                     "new_device", _new_device_severity(network), mac,
-                    f"New {kind} device \"{name}\" ({mac}) joined {network} with IP {ip or '—'}"))
+                    f"New {kind} device \"{name}\" ({mac}) joined {network} with IP {ip or '—'}",
+                    {"name": name, "mac": mac, "ip": ip, "network": network, "link": link}))
         else:
             prev_net = prev["last_network"]
             # "?" means the controller had no network recorded (e.g. mid-DHCP);
@@ -116,7 +147,9 @@ def process_clients(clients: list[dict]) -> list[dict]:
             if prev_net and prev_net != "?" and network != "?" and network != prev_net:
                 events.append(store.add_event(
                     "network_change", "warning", mac,
-                    f"\"{name}\" ({mac}) moved from {prev_net} to {network}, now IP {ip or '—'}"))
+                    f"\"{name}\" ({mac}) moved from {prev_net} to {network}, now IP {ip or '—'}",
+                    {"name": name, "mac": mac, "ip": ip, "network": network,
+                     "prev_network": prev_net, "link": link}))
             keep_net = network if network != "?" else (prev_net or "?")
             store.upsert_device(mac, name, keep_net, ip, c.get("is_wired"), seen)
 
@@ -126,8 +159,12 @@ def process_clients(clients: list[dict]) -> list[dict]:
         store.update_device_fields(mac, **upd)
         if anomaly:
             sev = "critical" if network == "IoT" else "warning"
-            events.append(store.add_event("traffic_anomaly", sev, mac,
-                                          f"\"{name}\" ({mac}, {ip or 'no IP'}) is {anomaly}"))
+            events.append(store.add_event(
+                "traffic_anomaly", sev, mac,
+                f"\"{name}\" ({mac}, {ip or 'no IP'}) is uploading "
+                f"{anomaly['rate_mbps']} Mbit/s sustained for {anomaly['minutes']} min "
+                f"(its normal baseline is {anomaly['baseline_mbps']} Mbit/s)",
+                {"name": name, "mac": mac, "ip": ip, "network": network, **anomaly}))
 
     if baseline:
         store.set_meta("baseline_done", "1")
@@ -146,11 +183,13 @@ def process_protect(devices: list[dict]) -> list[dict]:
             if d["state"] == "CONNECTED":
                 events.append(store.add_event(
                     "protect_up", "info", None,
-                    f"Protect {d['kind']} \"{d['name']}\" is back: {d['state']}"))
+                    f"Protect {d['kind']} \"{d['name']}\" is back: {d['state']}",
+                    {"name": d["name"], "kind": d["kind"], "state": d["state"]}))
             else:
                 events.append(store.add_event(
                     "protect_down", "critical", None,
-                    f"Protect {d['kind']} \"{d['name']}\" changed to {d['state']}"))
+                    f"Protect {d['kind']} \"{d['name']}\" changed to {d['state']}",
+                    {"name": d["name"], "kind": d["kind"], "state": d["state"]}))
         store.upsert_protect_device(d["id"], d["kind"], d["name"], d["state"])
     return events
 
@@ -206,21 +245,21 @@ def process_config(state: dict[str, list[dict]]) -> list[dict]:
                 if not baseline:
                     events.append(store.add_event(
                         "config_added", _cfg_severity(coll, norm, None), None,
-                        f"{label} \"{name}\" was added"))
+                        f"{label} \"{name}\" was added",
+                        {"label": label, "name": name, "changes": [], "more": 0}))
             elif prev["data"] != data:
                 old = json.loads(prev["data"])
                 changed = sorted(k for k in set(old) | set(norm)
                                  if old.get(k) != norm.get(k))
-                detail = "; ".join(
-                    f"{k}: {json.dumps(old.get(k), default=str)} → "
-                    f"{json.dumps(norm.get(k), default=str)}"[:120]
-                    for k in changed[:3])
-                if len(changed) > 3:
-                    detail += f" (+{len(changed) - 3} more)"
+                lines = [humanize_change(k, old.get(k), norm.get(k))[:120]
+                         for k in changed[:3]]
+                more = max(0, len(changed) - 3)
+                summary = "; ".join(lines) + (f" (+{more} more)" if more else "")
                 store.upsert_config_object(coll, oid, name, data)
                 events.append(store.add_event(
                     "config_changed", _cfg_severity(coll, norm, changed), None,
-                    f"{label} \"{name}\" changed — {detail}"))
+                    f"{label} \"{name}\" changed — {summary}",
+                    {"label": label, "name": name, "changes": lines, "more": more}))
 
     for (coll, oid), row in stored.items():
         if (coll, oid) not in seen:
@@ -228,7 +267,9 @@ def process_config(state: dict[str, list[dict]]) -> list[dict]:
             events.append(store.add_event(
                 "config_removed",
                 "critical" if coll in CRITICAL_COLLECTIONS else "warning", None,
-                f"{CONFIG_LABEL.get(coll, coll)} \"{row['name']}\" was removed"))
+                f"{CONFIG_LABEL.get(coll, coll)} \"{row['name']}\" was removed",
+                {"label": CONFIG_LABEL.get(coll, coll), "name": row["name"],
+                 "changes": [], "more": 0}))
 
     if baseline:
         store.set_meta("config_baseline_done", "1")
@@ -242,11 +283,13 @@ def poller_failed(which: str, consecutive: int, error: str) -> list[dict]:
     # One event when a poller crosses the failure threshold, not one per failure.
     if consecutive == 5:
         return [store.add_event("poller_error", "warning", None,
-                                f"{which} polling has failed 5 times in a row: {error[:200]}")]
+                                f"{which} polling has failed 5 times in a row: {error[:200]}",
+                                {"which": which, "consecutive": consecutive, "error": error})]
     return []
 
 
 def poller_recovered(which: str, was_failing: bool) -> list[dict]:
     if was_failing:
-        return [store.add_event("poller_ok", "info", None, f"{which} polling recovered")]
+        return [store.add_event("poller_ok", "info", None, f"{which} polling recovered",
+                                {"which": which})]
     return []

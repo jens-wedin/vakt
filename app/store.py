@@ -122,12 +122,16 @@ def set_device_status(mac: str, status: str):
     db().commit()
 
 
-def add_event(kind, severity, mac, message) -> dict:
+def add_event(kind, severity, mac, message, detail: dict | None = None) -> dict:
+    """`detail` rides along on the returned event so notifications can be
+    rendered from structured data. It is deliberately not persisted — the
+    dashboard and the event history read `message`."""
     ts = now_iso()
     db().execute("INSERT INTO events(ts,kind,severity,mac,message) VALUES(?,?,?,?,?)",
                  (ts, kind, severity, mac, message))
     db().commit()
-    return {"ts": ts, "kind": kind, "severity": severity, "mac": mac, "message": message}
+    return {"ts": ts, "kind": kind, "severity": severity, "mac": mac,
+            "message": message, "detail": detail or {}}
 
 
 def recent_events(limit=100) -> list[sqlite3.Row]:

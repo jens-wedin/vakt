@@ -43,6 +43,25 @@ Set `NTFY_URL` to an [ntfy](https://ntfy.sh) topic URL (public ntfy.sh with a
 long random topic name, or self-host ntfy in Coolify). Warning/critical events
 are pushed; info events only show on the dashboard.
 
+Notifications are written to be read on a lock screen: the title says what
+happened, the body names the device, where it is, and why it alerted.
+
+```
+🚨🆕  New device on Default
+      Galaxy-S23 · Wi-Fi · 192.168.1.94
+      aa:bb:cc:dd:ee:ff
+      Never seen before — tap to review.
+```
+
+Critical events carry 🚨 plus a symbol for the kind; warnings carry the kind
+symbol alone, so severity and type are both readable without opening the
+notification. Set `DASHBOARD_URL` (e.g. `http://192.168.1.33:8181`) and tapping
+a notification opens the dashboard; leave it empty and the link is dropped.
+
+An event whose structured detail is missing or malformed still pushes — it
+falls back to the same one-line message the dashboard shows. A badly worded
+alert beats a missing one.
+
 ## Design notes
 
 - **Read-only by construction** — the app only performs GET requests. It can
@@ -62,6 +81,18 @@ flags the event and device in red and counts on the "to review / flagged"
 card until resolved (press OK later to clear). Note: wired byte counters are
 unreliable for devices sharing one switch port (see `../memory.md`), so traffic
 anomalies mostly matter for WiFi clients.
+
+## Tests
+
+No dependencies beyond the standard library:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -t .
+```
+
+`test_alerts.py` covers notification rendering; `test_detect_renders.py` covers
+the detector → renderer contract, so a renamed field can't silently downgrade
+every notification to its raw-message fallback.
 
 ## Roadmap
 

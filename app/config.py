@@ -17,6 +17,10 @@ NTFY_URL = os.environ.get("NTFY_URL", "")
 # Optional HTTP Basic auth for the dashboard (any username). Empty = no auth.
 DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "")
 
+# Optional: the dashboard's LAN address, e.g. http://192.168.1.33:8181. Set it and
+# notifications become tappable (ntfy Click header); leave empty to drop the link.
+DASHBOARD_URL = os.environ.get("DASHBOARD_URL", "").rstrip("/")
+
 # MACs excluded from traffic-anomaly checks (comma-separated), e.g. a camera
 # that legitimately uploads at high rates in bursts.
 TRAFFIC_EXEMPT = {m.strip().lower() for m in
