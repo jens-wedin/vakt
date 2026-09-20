@@ -50,9 +50,10 @@ def render() -> str:
     """
 
     protect_rows = "".join(
-        f"<tr><td>{escape(p['kind'])}</td><td>{escape(p['name'])}</td>"
-        f"<td class='{'okc' if p['state'] == 'CONNECTED' else 'badc'}'>{escape(p['state'])}</td>"
-        f"<td>{_age(p['last_change'])}</td></tr>"
+        f"<tr><td class='p-kind'>{escape(p['kind'])}</td>"
+        f"<td class='p-name'>{escape(p['name'])}</td>"
+        f"<td class='p-state {'okc' if p['state'] == 'CONNECTED' else 'badc'}'>{escape(p['state'])}</td>"
+        f"<td class='p-when'>{_age(p['last_change'])}</td></tr>"
         for p in protect) or "<tr><td colspan=4>no Protect data (set UNIFI_NVR_CONSOLE_ID)</td></tr>"
 
     def _verdict_cell(e):
@@ -63,7 +64,7 @@ def render() -> str:
         if e["verdict"] == "ok" or (e["acked"] and not e["verdict"]):
             return "<td class='dim'>✓ ok</td>"
         if e["verdict"] == "not_ok":
-            return f"<td><span class='flag'>⚠ flagged</span> {ok_btn}</td>"
+            return f"<td class='btns'><span class='flag'>⚠ flagged</span> {ok_btn}</td>"
         no_btn = (f"<form method='post' action='/verdict/{e['id']}/not_ok'>"
                   f"<button class='ackbtn no'>Not OK</button></form>")
         return f"<td class='btns'>{ok_btn}{no_btn}</td>"
@@ -76,9 +77,10 @@ def render() -> str:
         return ""
 
     event_rows = "".join(
-        f"<tr class='{_row_class(e)}'><td>{_age(e['ts'])}</td>"
-        f"<td><span class='sev' style='background:{SEV_COLOR.get(e['severity'], '#888')}'>{escape(e['severity'])}</span></td>"
-        f"<td>{escape(e['kind'])}</td><td>{escape(e['message'])}</td>{_verdict_cell(e)}</tr>"
+        f"<tr class='{_row_class(e)}'><td class='c-when'>{_age(e['ts'])}</td>"
+        f"<td class='c-sev'><span class='sev' style='background:{SEV_COLOR.get(e['severity'], '#888')}'>{escape(e['severity'])}</span></td>"
+        f"<td class='c-kind'>{escape(e['kind'])}</td>"
+        f"<td class='c-msg'>{escape(e['message'])}</td>{_verdict_cell(e)}</tr>"
         for e in events) or "<tr><td colspan=5>no events yet</td></tr>"
 
     def _dev_status(d):
@@ -94,11 +96,14 @@ def render() -> str:
 
     device_rows = "".join(
         f"<tr class='{'flagrow' if d['status'] == 'flagged' else ''}'>"
-        f"<td>{escape(d['last_network'] or '?')}</td><td>{escape(d['last_ip'] or '—')}</td>"
-        f"<td>{escape(d['name'] or '?')}</td><td class='btns'>{_dev_status(d)}</td>"
-        f"<td class='mono'>{escape(d['mac'])}</td>"
-        f"<td>{'wired' if d['is_wired'] else 'WiFi'}</td>"
-        f"<td>{_age(d['last_seen'])}</td><td>{_age(d['first_seen'])}</td></tr>"
+        f"<td class='d-net'>{escape(d['last_network'] or '?')}</td>"
+        f"<td class='d-ip'>{escape(d['last_ip'] or '—')}</td>"
+        f"<td class='d-name'>{escape(d['name'] or '?')}</td>"
+        f"<td class='btns'>{_dev_status(d)}</td>"
+        f"<td class='mono d-mac'>{escape(d['mac'])}</td>"
+        f"<td class='d-link'>{'wired' if d['is_wired'] else 'WiFi'}</td>"
+        f"<td class='d-seen' data-label='seen'>{_age(d['last_seen'])}</td>"
+        f"<td class='d-first' data-label='first'>{_age(d['first_seen'])}</td></tr>"
         for d in devices)
 
     return f"""<!doctype html><html lang="en"><head>
@@ -106,12 +111,16 @@ def render() -> str:
 <title>vakt</title>
 <style>
   body {{ font: 14px/1.5 -apple-system, system-ui, sans-serif; margin: 0; background: #14161a; color: #d7dae0; }}
-  header {{ padding: 14px 22px; border-bottom: 1px solid #2a2e35; display: flex; gap: 10px; align-items: baseline; }}
+  header {{ padding: 14px 22px; border-bottom: 1px solid #2a2e35; display: flex; gap: 10px;
+             align-items: baseline; flex-wrap: wrap; }}
   h1 {{ font-size: 18px; margin: 0; }} h1 span {{ color: #5a9e6f; }}
   header small {{ color: #8b909a; }}
   main {{ padding: 18px 22px; max-width: 1100px; margin: 0 auto; }}
-  .cards {{ display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }}
-  .card {{ background: #1c1f25; border: 1px solid #2a2e35; border-radius: 8px; padding: 12px 16px; min-width: 130px; }}
+  .cards {{ display: grid; gap: 12px; margin-bottom: 22px;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }}
+  .card {{ min-width: 0; }}
+  .card .num {{ overflow-wrap: anywhere; }}
+  .card {{ background: #1c1f25; border: 1px solid #2a2e35; border-radius: 8px; padding: 12px 16px; }}
   .card .num {{ font-size: 17px; font-weight: 600; }}
   .card div:last-child {{ color: #8b909a; font-size: 12px; }}
   .card.bad {{ border-color: #e5484d; }} .card.ok .num {{ color: #5a9e6f; }} .card.bad .num {{ color: #e5484d; }}
@@ -126,23 +135,67 @@ def render() -> str:
   .mono {{ font-family: ui-monospace, monospace; font-size: 13px; }}
   .dim {{ opacity: .45; }}
   .ackbtn {{ background: #2a2e35; color: #d7dae0; border: 1px solid #3a3f48; border-radius: 4px;
-             padding: 1px 8px; font-size: 12px; cursor: pointer; }}
+             padding: 3px 10px; font-size: 12px; cursor: pointer; }}
+  .ackbtn:focus-visible {{ outline: 2px solid #5a9e6f; outline-offset: 2px; }}
   .ackbtn:hover {{ border-color: #5a9e6f; }}
   .ackbtn.no:hover {{ border-color: #e5484d; }}
   .btns form {{ display: inline-block; margin-right: 5px; }}
   .flag {{ color: #e5484d; font-weight: 600; }}
   .flagrow td {{ background: rgba(229, 72, 77, .07); }}
   .card.warn .num {{ color: #e2a336; }}
+
+  /* Narrow screens: a table that scrolls sideways hides the one column that
+     matters (the message). Below 720px each row becomes its own card and the
+     cells are reordered into reading order. */
+  @media (max-width: 720px) {{
+    header {{ padding: 12px 16px; }}
+    main {{ padding: 16px; }}
+    .cards {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
+    .card {{ padding: 10px 12px; }}
+    .tblwrap {{ overflow-x: visible; }}
+    table, tbody {{ display: block; }}
+    tr.hrow {{ display: none; }}
+    tr {{ display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px;
+          background: #1c1f25; border: 1px solid #2a2e35; border-radius: 8px;
+          padding: 10px 12px; margin-bottom: 8px; }}
+    td {{ display: block; width: auto !important; min-width: 0; padding: 0;
+          border-bottom: 0; white-space: normal; overflow-wrap: anywhere; }}
+    td:empty {{ display: none; }}
+    td[data-label]::before {{ content: attr(data-label) " "; color: #8b909a; }}
+
+    .c-sev {{ order: 1; }} .c-when {{ order: 2; }} .c-kind {{ order: 3; }}
+    .c-msg {{ order: 4; flex: 1 0 100%; margin-top: 2px; }}
+    td.dim {{ order: 5; }}
+
+    .d-name {{ order: 1; flex: 1 0 100%; }}
+    .d-net {{ order: 2; }} .d-ip {{ order: 3; }} .d-link {{ order: 4; }}
+    .d-mac {{ order: 5; flex: 1 0 100%; }}
+    .d-seen {{ order: 6; }} .d-first {{ order: 7; }}
+
+    .p-name {{ order: 1; flex: 1 0 100%; }}
+    .p-kind {{ order: 2; }} .p-state {{ order: 3; }} .p-when {{ order: 4; }}
+
+    .d-name, .p-name {{ font-weight: 600; font-size: 15px; }}
+    .c-when, .c-kind, .d-net, .d-ip, .d-link, .d-seen, .d-first,
+    .p-kind, .p-when {{ color: #8b909a; font-size: 12px; }}
+
+    .flagrow td {{ background: none; }}
+    .flagrow {{ border-color: #e5484d; background: rgba(229, 72, 77, .07); }}
+
+    .btns {{ order: 8; flex: 1 0 100%; display: flex; gap: 8px; margin-top: 8px; }}
+    .btns form {{ display: block; flex: 1; margin: 0; }}
+    .ackbtn {{ width: 100%; min-height: 44px; font-size: 14px; }}
+  }}
 </style></head><body>
 <header><h1><span>●</span> vakt</h1><small>network watchtower · read-only · refreshes every 30 s</small></header>
 <main>
   <div class="cards">{cards}</div>
   <h2>Protect devices</h2>
-  <div class="tblwrap"><table><tr><th>Kind</th><th>Name</th><th>State</th><th>Changed</th></tr>{protect_rows}</table></div>
+  <div class="tblwrap"><table><tr class='hrow'><th>Kind</th><th>Name</th><th>State</th><th>Changed</th></tr>{protect_rows}</table></div>
   <h2>Events</h2>
-  <div class="tblwrap"><table><tr><th>When</th><th>Severity</th><th>Kind</th><th>Message</th><th></th></tr>{event_rows}</table></div>
+  <div class="tblwrap"><table><tr class='hrow'><th>When</th><th>Severity</th><th>Kind</th><th>Message</th><th></th></tr>{event_rows}</table></div>
   <h2>Known devices{f" — {sum(1 for d in devices if not d['status'])} unreviewed" if any(not d['status'] for d in devices) else ""}</h2>
-  <div class="tblwrap"><table><tr><th>Network</th><th>IP</th><th>Name</th><th>Status</th><th>MAC</th><th>Link</th><th>Seen</th><th>First seen</th></tr>{device_rows}</table></div>
+  <div class="tblwrap"><table><tr class='hrow'><th>Network</th><th>IP</th><th>Name</th><th>Status</th><th>MAC</th><th>Link</th><th>Seen</th><th>First seen</th></tr>{device_rows}</table></div>
 </main>
 <script>
 async function refreshMain() {{
