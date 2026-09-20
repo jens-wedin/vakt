@@ -11,7 +11,8 @@ when something changes. Dashboard on port 8080.
 | `new_device` | critical on Default, warning on IoT, info on Free WiFi | A MAC never seen before joined the network |
 | `network_change` | warning | A known device switched VLANs |
 | `protect_down` / `protect_up` | critical / info | A Protect camera, sensor, or SuperLink changed state (needs `UNIFI_NVR_CONSOLE_ID`) |
-| `config_added` / `config_changed` / `config_removed` | critical for firewall rules, port forwards, NAT rules, and UPnP flips; warning for WLAN/network/settings drift | Gateway config drifted from the stored golden state (checked every 5 min; WiFi passphrases and other secrets are compared as hashes, never stored) |
+| `config_added` / `config_changed` / `config_removed` | critical for firewall rules, port forwards, NAT rules, and UPnP flips; warning for WLAN/network/settings drift | Gateway config drifted from the stored golden state (checked every 5 min; WiFi passphrases and other secrets are compared as hashes, never stored; runtime pointers that move on their own, like the IPS engine's `last_alert_id`, are excluded — they are not configuration) |
+| `ips_alert` | info | The gateway's IPS engine logged a new alert. Dashboard only: the alert log itself isn't readable through the API, so open Settings → Security on the console to see what it caught |
 | `traffic_anomaly` | critical on IoT, warning elsewhere | A device's upload ran >2 Mbit/s AND 8× its own learned baseline, sustained 10+ min (learns ~30 min first; max one alert per device per 6 h; exempt devices via `TRAFFIC_EXEMPT`) |
 | `poller_error` / `poller_ok` | warning / info | The API polling itself broke or recovered |
 | `baseline` | info | First run: all current devices registered as known (no alert storm) |

@@ -25,6 +25,10 @@ CONFIG_LABEL = {
     "networkconf": "Network",
     "setting": "Setting",
 }
+# Runtime pointers that live inside config objects. They move on their own, so
+# comparing them as configuration produces a false alarm every time they do.
+VOLATILE_CONFIG_FIELDS = {"last_alert_id"}
+
 # Changes here can open the network to the outside — always critical.
 CRITICAL_COLLECTIONS = {"firewallrule", "portforward", "nat"}
 
@@ -205,13 +209,46 @@ def _cfg_name(obj: dict) -> str:
 def _cfg_normalize(obj: dict) -> dict:
     out = {}
     for k, v in obj.items():
-        if k.startswith("attr_"):
+        if k.startswith("attr_") or k in VOLATILE_CONFIG_FIELDS:
             continue
         if k.startswith("x_") and v:  # secrets (passphrases etc.): keep only a digest
             out[k] = "sha256:" + hashlib.sha256(str(v).encode()).hexdigest()[:16]
         else:
             out[k] = v
     return out
+
+
+def _ips_alert_time(alert_id: str) -> str:
+    """Alert ids look like "5-2026-09-19T17:03:50.243020 0200" — the timestamp is
+    the half worth reading. Anything in another shape is reported verbatim."""
+    _, _, rest = alert_id.partition("-")
+    if len(rest) >= 16 and rest[4] == "-" and rest[10] == "T":
+        return rest[:16].replace("T", " ")
+    return alert_id
+
+
+def _check_ips_alert(state: dict) -> list[dict]:
+    """The IPS engine's `last_alert_id` moves when it logs an alert, not when
+    anyone changes configuration — hence VOLATILE_CONFIG_FIELDS. But it is the
+    only visible trace that IPS caught something (the alert log itself returns
+    404/InvalidObject through the Cloud Connector on 10.6.101), so report the
+    move on its own instead of discarding it."""
+    for o in state.get("setting", []):
+        if o.get("key") != "ips":
+            continue
+        current = str(o.get("last_alert_id") or "")
+        if not current:
+            return []
+        prev = store.get_meta("ips_last_alert_id")
+        store.set_meta("ips_last_alert_id", current)
+        if prev and prev != current:
+            when = _ips_alert_time(current)
+            return [store.add_event(
+                "ips_alert", "info", None,
+                f"IPS logged a new alert at {when} — the alert log is not reachable "
+                f"through the API; open Settings → Security on the console to read it",
+                {"when": when, "alert_id": current})]
+    return []
 
 
 def _cfg_severity(coll: str, obj: dict, changed_fields: list[str] | None) -> str:
@@ -250,7 +287,14 @@ def process_config(state: dict[str, list[dict]]) -> list[dict]:
             elif prev["data"] != data:
                 old = json.loads(prev["data"])
                 changed = sorted(k for k in set(old) | set(norm)
-                                 if old.get(k) != norm.get(k))
+                                 if old.get(k) != norm.get(k)
+                                 and k not in VOLATILE_CONFIG_FIELDS)
+                if not changed:
+                    # Only a volatile leftover differed — a golden copy stored
+                    # before that field was classified. Heal it quietly; the
+                    # fix must not alarm about itself.
+                    store.upsert_config_object(coll, oid, name, data)
+                    continue
                 lines = [humanize_change(k, old.get(k), norm.get(k))[:120]
                          for k in changed[:3]]
                 more = max(0, len(changed) - 3)
@@ -260,6 +304,8 @@ def process_config(state: dict[str, list[dict]]) -> list[dict]:
                     "config_changed", _cfg_severity(coll, norm, changed), None,
                     f"{label} \"{name}\" changed — {summary}",
                     {"label": label, "name": name, "changes": lines, "more": more}))
+
+    events += _check_ips_alert(state)
 
     for (coll, oid), row in stored.items():
         if (coll, oid) not in seen:

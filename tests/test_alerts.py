@@ -112,6 +112,12 @@ class OtherKinds(unittest.TestCase):
                              name="hairpin", changes=[], more=0))
         self.assertEqual(r["title"], "NAT rule removed")
 
+    def test_ips_alert_says_the_engine_fired_and_where_to_look(self):
+        r = alerts.render(ev("ips_alert", "info", when="2026-09-20 08:14",
+                             alert_id="6-2026-09-20T08:14:02"))
+        self.assertEqual(r["title"], "IPS logged an alert")
+        self.assertIn("2026-09-20 08:14", r["body"])
+
     def test_poller_error_is_about_vakt_not_the_network(self):
         r = alerts.render(ev("poller_error", "warning", which="clients",
                              consecutive=5, error="timeout"))

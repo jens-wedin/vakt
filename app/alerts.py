@@ -24,6 +24,7 @@ KIND_TAG = {
     "config_added": "wrench",
     "config_changed": "wrench",
     "config_removed": "wrench",
+    "ips_alert": "shield",
     "poller_error": "warning",
     "poller_ok": "white_check_mark",
     "baseline": "clipboard",
@@ -87,6 +88,13 @@ def _config(kind):
     return render
 
 
+def _ips_alert(d):
+    return ("IPS logged an alert",
+            [f"At {d['when']}",
+             "The alert log isn't readable through the API — open "
+             "Settings → Security on the console."])
+
+
 def _poller_error(d):
     return ("vakt lost contact with UniFi",
             [f"{d['which']} polling has failed {d['consecutive']} times in a row.",
@@ -106,6 +114,7 @@ RENDERERS = {
     "config_added": _config("config_added"),
     "config_changed": _config("config_changed"),
     "config_removed": _config("config_removed"),
+    "ips_alert": _ips_alert,
     "poller_error": _poller_error,
     "poller_ok": _poller_ok,
 }
