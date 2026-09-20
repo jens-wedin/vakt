@@ -8,7 +8,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 
 import config  # noqa: E402
 
-OPTIONAL = {"ntfy", "dashboard_url", "dashboard_password", "protect"}
+# dashboard_password is deliberately absent: /healthz is unauthenticated, and
+# an open endpoint should not advertise whether the dashboard has a password.
+OPTIONAL = {"ntfy", "dashboard_url", "protect"}
 
 
 class Configured(unittest.TestCase):

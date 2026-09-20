@@ -30,11 +30,14 @@ TRAFFIC_EXEMPT = {m.strip().lower() for m in
 def configured() -> dict:
     """Which optional integrations are wired up. Booleans only — never the
     values — so /healthz can confirm an env var actually reached the container
-    without exposing a secret topic URL or a password."""
+    without exposing a secret topic URL.
+
+    DASHBOARD_PASSWORD is deliberately left out: /healthz is unauthenticated,
+    and an open endpoint should not report whether the dashboard is protected.
+    That one verifies itself — a password that arrived turns / into a 401."""
     return {
         "ntfy": bool(NTFY_URL),
         "dashboard_url": bool(DASHBOARD_URL),
-        "dashboard_password": bool(DASHBOARD_PASSWORD),
         "protect": bool(UNIFI_NVR_CONSOLE_ID),
     }
 
