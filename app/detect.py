@@ -74,6 +74,27 @@ def _new_device_severity(network: str) -> str:
     return "warning"
 
 
+def _has_presence(c: dict, ip: str) -> bool:
+    """Whether a client has actually turned up. An entry with no address and no
+    bytes may not be a device at all — an access point can register a phantom
+    MAC derived from its own (the U7 Lite ghost of 2026-09-20: wired, no IP,
+    zero bytes, gone in four minutes). Wait for proof before alerting."""
+    if ip:
+        return True
+    pre = "wired-" if c.get("is_wired") else ""
+    return bool((c.get(pre + "rx_bytes") or 0) or (c.get(pre + "tx_bytes") or 0))
+
+
+def _announce_new_device(c: dict, mac: str, name: str, network: str,
+                         ip: str, link: str) -> dict:
+    kind = "wired" if c.get("is_wired") else "WiFi"
+    store.update_device_fields(mac, announced=1)
+    return store.add_event(
+        "new_device", _new_device_severity(network), mac,
+        f"New {kind} device \"{name}\" ({mac}) joined {network} with IP {ip or '—'}",
+        {"name": name, "mac": mac, "ip": ip, "network": network, "link": link})
+
+
 def _traffic_check(c: dict, prev, now_ts: float) -> tuple[dict, str | None]:
     """Update per-device upload EWMA from counter deltas; return (field updates,
     anomaly detail or None). Counter resets and irregular sample gaps are skipped."""
@@ -137,12 +158,10 @@ def process_clients(clients: list[dict]) -> list[dict]:
 
         if prev is None:
             store.upsert_device(mac, name, network, ip, c.get("is_wired"), seen)
-            if not baseline:
-                kind = "wired" if c.get("is_wired") else "WiFi"
-                events.append(store.add_event(
-                    "new_device", _new_device_severity(network), mac,
-                    f"New {kind} device \"{name}\" ({mac}) joined {network} with IP {ip or '—'}",
-                    {"name": name, "mac": mac, "ip": ip, "network": network, "link": link}))
+            if baseline:
+                store.update_device_fields(mac, announced=1)
+            elif _has_presence(c, ip):
+                events.append(_announce_new_device(c, mac, name, network, ip, link))
         else:
             prev_net = prev["last_network"]
             # "?" means the controller had no network recorded (e.g. mid-DHCP);
@@ -156,6 +175,10 @@ def process_clients(clients: list[dict]) -> list[dict]:
                      "prev_network": prev_net, "link": link}))
             keep_net = network if network != "?" else (prev_net or "?")
             store.upsert_device(mac, name, keep_net, ip, c.get("is_wired"), seen)
+            # Registered earlier without an address or a byte to its name —
+            # announce it now that it has actually turned up.
+            if not baseline and not prev["announced"] and _has_presence(c, ip):
+                events.append(_announce_new_device(c, mac, name, keep_net, ip, link))
 
         if mac.lower() in config.TRAFFIC_EXEMPT:
             continue

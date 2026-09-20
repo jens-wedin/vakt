@@ -54,7 +54,7 @@ def db() -> sqlite3.Connection:
           value TEXT
         );
         """)
-        _ensure_columns(_conn, "devices", {
+        _added = _ensure_columns(_conn, "devices", {
             "ewma_up": "REAL DEFAULT 0",        # learned upload baseline, bytes/s
             "samples": "INTEGER DEFAULT 0",
             "last_rx_bytes": "INTEGER",
@@ -63,18 +63,27 @@ def db() -> sqlite3.Connection:
             "high_since": "REAL",
             "last_traffic_alert": "REAL",
             "status": "TEXT",  # NULL = unreviewed, 'ok' = verified, 'flagged' = suspicious
+            "announced": "INTEGER DEFAULT 0",  # a new_device event has been raised
         })
+        if "announced" in _added:
+            # Everything already in the registry is known. Without this, adding
+            # the column would alert about every device on the next poll.
+            _conn.execute("UPDATE devices SET announced=1")
         _ensure_columns(_conn, "events", {"acked": "INTEGER DEFAULT 0",
                                           "verdict": "TEXT"})
         _conn.commit()
     return _conn
 
 
-def _ensure_columns(conn: sqlite3.Connection, table: str, cols: dict[str, str]):
+def _ensure_columns(conn: sqlite3.Connection, table: str,
+                    cols: dict[str, str]) -> set[str]:
     have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+    added = set()
     for name, decl in cols.items():
         if name not in have:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+            added.add(name)
+    return added
 
 
 def get_meta(key: str) -> str | None:

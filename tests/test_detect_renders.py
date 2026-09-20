@@ -40,6 +40,35 @@ class ClientEvents(unittest.TestCase):
         self.assertEqual(r["title"], "New device on Default")
         self.assertIn("Galaxy-S23 · Wi-Fi · 192.168.1.94", r["body"])
 
+    def test_a_client_with_no_address_and_no_traffic_waits(self):
+        # The U7 Lite ghost of 2026-09-20: wired, no IP, zero bytes, gone in
+        # four minutes. Register it, but don't wake anyone up over it.
+        events = detect.process_clients(
+            [client("aa:bb:cc:dd:ee:03", "ghost", "", "Default", wired=True)])
+        self.assertEqual([e for e in events if e["kind"] == "new_device"], [])
+        self.assertIn("aa:bb:cc:dd:ee:03", store.get_devices())
+
+    def test_it_alerts_once_the_device_actually_shows_up(self):
+        detect.process_clients(
+            [client("aa:bb:cc:dd:ee:04", "late", "", "Default", wired=True)])
+        events = detect.process_clients(
+            [client("aa:bb:cc:dd:ee:04", "late", "192.168.1.77", "Default", wired=True)])
+        [e] = [e for e in events if e["kind"] == "new_device"]
+        self.assertIn("192.168.1.77", e["message"])
+
+    def test_it_announces_a_device_only_once(self):
+        detect.process_clients([client("aa:bb:cc:dd:ee:05", "x", "", "Default")])
+        detect.process_clients([client("aa:bb:cc:dd:ee:05", "x", "192.168.1.78", "Default")])
+        events = detect.process_clients(
+            [client("aa:bb:cc:dd:ee:05", "x", "192.168.1.78", "Default")])
+        self.assertEqual([e for e in events if e["kind"] == "new_device"], [])
+
+    def test_traffic_counts_as_showing_up_even_without_an_address(self):
+        c = client("aa:bb:cc:dd:ee:06", "silent but busy", "", "IoT")
+        c["rx_bytes"] = 5000
+        events = detect.process_clients([c])
+        self.assertEqual(len([e for e in events if e["kind"] == "new_device"]), 1)
+
     def test_network_change_renders_with_the_previous_network(self):
         detect.process_clients(
             [client("aa:bb:cc:dd:ee:02", "Dishwasher", "192.168.1.51", "Default")])
