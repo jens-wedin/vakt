@@ -58,16 +58,16 @@ def render() -> str:
 
     def _verdict_cell(e):
         if e["severity"] == "info":
-            return "<td></td>"
+            return "<td class='c-act'></td>"
         ok_btn = (f"<form method='post' action='/verdict/{e['id']}/ok'>"
                   f"<button class='ackbtn'>OK</button></form>")
         if e["verdict"] == "ok" or (e["acked"] and not e["verdict"]):
-            return "<td class='dim'>✓ ok</td>"
+            return "<td class='c-act dim'>✓ ok</td>"
         if e["verdict"] == "not_ok":
-            return f"<td class='btns'><span class='flag'>⚠ flagged</span> {ok_btn}</td>"
+            return f"<td class='c-act btns'><span class='flag'>⚠ flagged</span> {ok_btn}</td>"
         no_btn = (f"<form method='post' action='/verdict/{e['id']}/not_ok'>"
                   f"<button class='ackbtn no'>Not OK</button></form>")
-        return f"<td class='btns'>{ok_btn}{no_btn}</td>"
+        return f"<td class='c-act btns'>{ok_btn}{no_btn}</td>"
 
     def _row_class(e):
         if e["verdict"] == "not_ok":
@@ -143,6 +143,11 @@ def render() -> str:
   .flag {{ color: #e5484d; font-weight: 600; }}
   .flagrow td {{ background: rgba(229, 72, 77, .07); }}
   .card.warn .num {{ color: #e2a336; }}
+  /* The message is prose and the widest thing on the page. Let it wrap and
+     absorb the slack; the buttons beside it shrink to what they need, so the
+     table never grows past the window. */
+  td.c-msg {{ white-space: normal; width: 100%; }}
+  td.c-act, th.c-act {{ width: 1%; white-space: nowrap; }}
 
   /* Narrow screens: a table that scrolls sideways hides the one column that
      matters (the message). Below 720px each row becomes its own card and the
@@ -193,7 +198,7 @@ def render() -> str:
   <h2>Protect devices</h2>
   <div class="tblwrap"><table><tr class='hrow'><th>Kind</th><th>Name</th><th>State</th><th>Changed</th></tr>{protect_rows}</table></div>
   <h2>Events</h2>
-  <div class="tblwrap"><table><tr class='hrow'><th>When</th><th>Severity</th><th>Kind</th><th>Message</th><th></th></tr>{event_rows}</table></div>
+  <div class="tblwrap"><table><tr class='hrow'><th>When</th><th>Severity</th><th>Kind</th><th>Message</th><th class='c-act'></th></tr>{event_rows}</table></div>
   <h2>Known devices{f" — {sum(1 for d in devices if not d['status'])} unreviewed" if any(not d['status'] for d in devices) else ""}</h2>
   <div class="tblwrap"><table><tr class='hrow'><th>Network</th><th>IP</th><th>Name</th><th>Status</th><th>MAC</th><th>Link</th><th>Seen</th><th>First seen</th></tr>{device_rows}</table></div>
 </main>
