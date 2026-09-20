@@ -27,6 +27,18 @@ TRAFFIC_EXEMPT = {m.strip().lower() for m in
                   os.environ.get("TRAFFIC_EXEMPT", "").split(",") if m.strip()}
 
 
+def configured() -> dict:
+    """Which optional integrations are wired up. Booleans only — never the
+    values — so /healthz can confirm an env var actually reached the container
+    without exposing a secret topic URL or a password."""
+    return {
+        "ntfy": bool(NTFY_URL),
+        "dashboard_url": bool(DASHBOARD_URL),
+        "dashboard_password": bool(DASHBOARD_PASSWORD),
+        "protect": bool(UNIFI_NVR_CONSOLE_ID),
+    }
+
+
 def validate():
     missing = [n for n, v in [("UNIFI_API_KEY", UNIFI_API_KEY),
                               ("UNIFI_CONSOLE_ID", UNIFI_CONSOLE_ID)] if not v]

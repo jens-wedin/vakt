@@ -112,4 +112,5 @@ def healthz():
         "last_protect_poll": store.get_meta("last_protect_poll"),
         "last_config_poll": store.get_meta("last_config_poll"),
         "consecutive_failures": _fail,
+        "configured": config.configured(),
     })
